@@ -1,9 +1,11 @@
+Update it to include issue_tracker and real codeowners:
 {
   "domain": "webasto_unite_modbus",
   "name": "Webasto Unite Modbus",
-  "codeowners": [],
+  "codeowners": ["@matkvaid"],
   "config_flow": true,
-  "documentation": "https://github.com/untitledlt/ha-miesto-plauciai",
+  "documentation": "https://github.com/matkvaid/webasto_unite_modbus",
+  "issue_tracker": "https://github.com/matkvaid/webasto_unite_modbus/issues",
   "integration_type": "device",
   "iot_class": "local_polling",
   "requirements": ["pymodbus>=3.6.8"],
