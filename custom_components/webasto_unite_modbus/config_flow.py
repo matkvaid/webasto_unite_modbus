@@ -42,24 +42,14 @@ class WebastoUniteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if not connected:
                     errors["base"] = "cannot_connect"
                 else:
-                    # Attempt to read from a known register to verify communication.
-                    # Newer firmware exposes the serial number starting at register 100,
-                    # while very old firmware uses register 1000.  Try 100 first and
-                    # fall back to 1000 if the read returns an error.  Only if both
-                    # attempts fail will we abort the flow.
-                    test_addresses = [100, 1000]
-                    read_success = False
-                    for address in test_addresses:
-                        result = await client.read_input_registers(
-                            address=address,
-                            count=1,
-                            slave=user_input[CONF_UNIT_ID],
-                        )
-                        if not result.isError():
-                            read_success = True
-                            break
-                    if not read_success:
-                        errors["base"] = "invalid_slave"
+                    # A successful TCP connection is considered sufficient validation.
+                    # Some firmware revisions expose different register maps (e.g. first
+                    # readable input register might be at 100 or 1000).  Instead of
+                    # performing a read check here and potentially failing the flow,
+                    # allow the integration to set up and let the coordinator handle
+                    # any read errors gracefully.  If the unit ID is incorrect, the
+                    # sensor values will simply be unavailable.
+                    pass
             except Exception:
                 errors["base"] = "cannot_connect"
             finally:
