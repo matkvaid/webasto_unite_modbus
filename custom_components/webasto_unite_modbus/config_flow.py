@@ -42,11 +42,23 @@ class WebastoUniteConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if not connected:
                     errors["base"] = "cannot_connect"
                 else:
-                    # Read from a known register (serial number start) to verify communication
-                    result = await client.read_input_registers(
-                        address=100, count=1, slave=user_input[CONF_UNIT_ID]
-                    )
-                    if result.isError():
+                    # Attempt to read from a known register to verify communication.
+                    # Newer firmware exposes the serial number starting at register 100,
+                    # while very old firmware uses register 1000.  Try 100 first and
+                    # fall back to 1000 if the read returns an error.  Only if both
+                    # attempts fail will we abort the flow.
+                    test_addresses = [100, 1000]
+                    read_success = False
+                    for address in test_addresses:
+                        result = await client.read_input_registers(
+                            address=address,
+                            count=1,
+                            slave=user_input[CONF_UNIT_ID],
+                        )
+                        if not result.isError():
+                            read_success = True
+                            break
+                    if not read_success:
                         errors["base"] = "invalid_slave"
             except Exception:
                 errors["base"] = "cannot_connect"
