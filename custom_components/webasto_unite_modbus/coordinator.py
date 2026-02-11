@@ -10,7 +10,13 @@ from typing import Any
 from pymodbus.client import AsyncModbusTcpClient
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfElectricCurrent, UnitOfElectricPotential, UnitOfPower
+from homeassistant.const import (
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfPower,
+    UnitOfEnergy,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -32,31 +38,92 @@ class RegisterDef:
     scale: float = 1.0
 
 
+# Complete register map based on Webasto Unite Modbus specification
 REGISTER_MAP: tuple[RegisterDef, ...] = (
+    # Identification strings
+    RegisterDef("serial_number", 100, data_type="string", count=25),
+    RegisterDef("charge_point_id", 130, data_type="string", count=50),
+    RegisterDef("brand", 190, data_type="string", count=10),
+    RegisterDef("model", 210, data_type="string", count=5),
+    RegisterDef("firmware_version", 230, data_type="string", count=50),
+    # Date and time (YYMMDD and HHMMSS)
+    RegisterDef("date", 290, data_type="uint32"),
+    RegisterDef("time", 294, data_type="uint32"),
+    # Rated power and phases
+    RegisterDef("charge_point_power", 400, data_type="uint32"),
+    RegisterDef("number_of_phases", 404),
+    # Charger states
     RegisterDef("charge_point_state", 1000),
     RegisterDef("charging_state", 1001),
     RegisterDef("equipment_state", 1002),
     RegisterDef("cable_state", 1004),
-    RegisterDef("fault_code", 1006),
-    RegisterDef("current_l1", 1008, data_type="uint16", scale=0.001),
-    RegisterDef("current_l2", 1010, data_type="uint16", scale=0.001),
-    RegisterDef("current_l3", 1012, data_type="uint16", scale=0.001),
+    RegisterDef("fault_code", 1006, data_type="uint32"),
+    # Electrical measurements
+    RegisterDef("current_l1", 1008, scale=0.001),
+    RegisterDef("current_l2", 1010, scale=0.001),
+    RegisterDef("current_l3", 1012, scale=0.001),
     RegisterDef("voltage_l1", 1014),
     RegisterDef("voltage_l2", 1016),
     RegisterDef("voltage_l3", 1018),
     RegisterDef("active_power_total", 1020, data_type="uint32"),
-    RegisterDef("meter_reading", 1036, data_type="uint32", scale=0.001),
+    RegisterDef("active_power_l1", 1024, data_type="uint32"),
+    RegisterDef("active_power_l2", 1028, data_type="uint32"),
+    RegisterDef("active_power_l3", 1032, data_type="uint32"),
+    RegisterDef("meter_reading", 1036, data_type="uint32", scale=0.1),
+    # Current limits and capabilities
     RegisterDef("session_max_current", 1100),
     RegisterDef("evse_min_current", 1102),
     RegisterDef("evse_max_current", 1104),
     RegisterDef("cable_max_current", 1106),
+    # Session statistics
     RegisterDef("charged_energy", 1502, data_type="uint32", scale=0.001),
+    RegisterDef("session_start_time", 1504, data_type="uint32"),
     RegisterDef("session_duration", 1508, data_type="uint32"),
+    RegisterDef("session_end_time", 1512, data_type="uint32"),
+    # Failsafe and dynamic control registers
     RegisterDef("failsafe_current", 2000, input_type="holding"),
     RegisterDef("failsafe_timeout", 2002, input_type="holding"),
     RegisterDef("charging_current_limit", 5004, input_type="holding"),
     RegisterDef("alive_register", 6000, input_type="holding"),
 )
+
+# State mapping for the charge point state
+CHARGE_POINT_STATE = {
+    0: "Available",
+    1: "Preparing",
+    2: "Charging",
+    3: "SuspendedEVSE",
+    4: "SuspendedEV",
+    5: "Finishing",
+    6: "Reserved",
+    7: "Unavailable",
+    8: "Faulted",
+}
+
+# Unit mapping used when no native_unit_of_measurement is defined in the entity description
+SENSOR_UNITS = {
+    "current_l1": UnitOfElectricCurrent.AMPERE,
+    "current_l2": UnitOfElectricCurrent.AMPERE,
+    "current_l3": UnitOfElectricCurrent.AMPERE,
+    "voltage_l1": UnitOfElectricPotential.VOLT,
+    "voltage_l2": UnitOfElectricPotential.VOLT,
+    "voltage_l3": UnitOfElectricPotential.VOLT,
+    "active_power_total": UnitOfPower.WATT,
+    "active_power_l1": UnitOfPower.WATT,
+    "active_power_l2": UnitOfPower.WATT,
+    "active_power_l3": UnitOfPower.WATT,
+    "charge_point_power": UnitOfPower.WATT,
+    "session_max_current": UnitOfElectricCurrent.AMPERE,
+    "evse_min_current": UnitOfElectricCurrent.AMPERE,
+    "evse_max_current": UnitOfElectricCurrent.AMPERE,
+    "cable_max_current": UnitOfElectricCurrent.AMPERE,
+    "failsafe_current": UnitOfElectricCurrent.AMPERE,
+    "charging_current_limit": UnitOfElectricCurrent.AMPERE,
+    # Energy and other units
+    "meter_reading": UnitOfEnergy.KILO_WATT_HOUR,
+    "charged_energy": UnitOfEnergy.KILO_WATT_HOUR,
+    "session_duration": UnitOfTime.SECONDS,
+}
 
 
 class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -100,7 +167,11 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return data
 
     async def _read_register(self, register: RegisterDef) -> list[int]:
-        count = 2 if register.data_type == "uint32" else register.count
+        """Read a register from the device."""
+        count = register.count
+        # Use two registers for 32-bit values
+        if register.data_type == "uint32":
+            count = 2
 
         if register.input_type == "holding":
             result = await self.client.read_holding_registers(
@@ -117,12 +188,13 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return result.registers
 
     def _decode_value(self, registers: list[int], register: RegisterDef) -> Any:
+        """Decode raw register data into a scaled value."""
         if register.data_type == "uint32":
             if len(registers) < 2:
                 return None
             value = (registers[0] << 16) + registers[1]
         elif register.data_type == "string":
-            chars = []
+            chars: list[int] = []
             for item in registers:
                 chars.append((item >> 8) & 0xFF)
                 chars.append(item & 0xFF)
@@ -142,37 +214,10 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not connected:
                 raise UpdateFailed("Could not connect to Webasto Unite")
 
-        result = await self.client.write_register(address=address, value=value, slave=self._unit_id)
+        result = await self.client.write_register(
+            address=address, value=value, slave=self._unit_id
+        )
         if result.isError():
             raise UpdateFailed(f"Write error at register {address}: {result}")
 
         await self.async_request_refresh()
-
-
-CHARGE_POINT_STATE = {
-    0: "Available",
-    1: "Preparing",
-    2: "Charging",
-    3: "SuspendedEVSE",
-    4: "SuspendedEV",
-    5: "Finishing",
-    6: "Reserved",
-    7: "Unavailable",
-    8: "Faulted",
-}
-
-SENSOR_UNITS = {
-    "current_l1": UnitOfElectricCurrent.AMPERE,
-    "current_l2": UnitOfElectricCurrent.AMPERE,
-    "current_l3": UnitOfElectricCurrent.AMPERE,
-    "voltage_l1": UnitOfElectricPotential.VOLT,
-    "voltage_l2": UnitOfElectricPotential.VOLT,
-    "voltage_l3": UnitOfElectricPotential.VOLT,
-    "active_power_total": UnitOfPower.WATT,
-    "session_max_current": UnitOfElectricCurrent.AMPERE,
-    "evse_min_current": UnitOfElectricCurrent.AMPERE,
-    "evse_max_current": UnitOfElectricCurrent.AMPERE,
-    "cable_max_current": UnitOfElectricCurrent.AMPERE,
-    "failsafe_current": UnitOfElectricCurrent.AMPERE,
-    "charging_current_limit": UnitOfElectricCurrent.AMPERE,
-}
