@@ -1,0 +1,20 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Webasto Unite Modbus",
+        "description": "Connect to your Webasto Unite charger via Modbus TCP",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "unit_id": "Modbus unit ID",
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to charger",
+      "invalid_slave": "Connected, but no valid response from this unit ID"
+    }
+  }
+}
