@@ -1,0 +1,11 @@
+{
+  "domain": "webasto_unite_modbus",
+  "name": "Webasto Unite Modbus",
+  "codeowners": [],
+  "config_flow": true,
+  "documentation": "https://github.com/untitledlt/ha-miesto-plauciai",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "requirements": ["pymodbus>=3.6.8"],
+  "version": "0.1.0"
+}
