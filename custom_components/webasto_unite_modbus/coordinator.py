@@ -175,11 +175,11 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if register.input_type == "holding":
             result = await self.client.read_holding_registers(
-                address=register.address, count=count, slave=self._unit_id
+                address=register.address, count=count, device_id=self._unit_id
             )
         else:
             result = await self.client.read_input_registers(
-                address=register.address, count=count, slave=self._unit_id
+                address=register.address, count=count, device_id=self._unit_id
             )
 
         if result.isError():
@@ -215,7 +215,7 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 raise UpdateFailed("Could not connect to Webasto Unite")
 
         result = await self.client.write_register(
-            address=address, value=value, slave=self._unit_id
+            address=address, value=value, device_id=self._unit_id
         )
         if result.isError():
             raise UpdateFailed(f"Write error at register {address}: {result}")
