@@ -115,7 +115,12 @@ def _decode_cable_state(value: Any) -> Any:
 
 
 def _decode_fault_code(value: Any) -> Any:
-    """Map fault code to descriptive string. Show 'No fault' for 0, otherwise return the numeric value."""
+    """Map fault code to descriptive string. Show 'No fault' for 0, otherwise return the numeric value.
+    
+    Note: Unlike other state decoders, this returns the numeric value for non-zero codes
+    rather than looking them up in a dictionary. This is intentional to ensure the
+    actual fault code number is visible for troubleshooting purposes.
+    """
     if value is None:
         return None
     try:
