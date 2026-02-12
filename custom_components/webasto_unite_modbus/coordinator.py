@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
@@ -24,6 +25,11 @@ from homeassistant.util import dt as dt_util
 from .const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL, CONF_UNIT_ID, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+# Keep-alive interval in seconds
+KEEP_ALIVE_INTERVAL = 5
+# Keep-alive register address
+KEEP_ALIVE_REGISTER = 6000
 
 
 @dataclass(frozen=True)
@@ -137,6 +143,7 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             timeout=5,
         )
         self._unit_id = entry.data[CONF_UNIT_ID]
+        self._keep_alive_task: asyncio.Task | None = None
 
         super().__init__(
             hass,
@@ -145,8 +152,49 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=entry.data[CONF_SCAN_INTERVAL]),
         )
 
+    async def async_start_keep_alive(self) -> None:
+        """Start the keep-alive background task."""
+        if self._keep_alive_task is None or self._keep_alive_task.done():
+            self._keep_alive_task = asyncio.create_task(self._keep_alive_loop())
+            _LOGGER.debug("Keep-alive task started")
+
+    async def _keep_alive_loop(self) -> None:
+        """Background task to write keep-alive register every 5 seconds."""
+        while True:
+            try:
+                await asyncio.sleep(KEEP_ALIVE_INTERVAL)
+                if self.client.connected:
+                    kwargs, positional_unit = self._get_modbus_call_kwargs(
+                        address=KEEP_ALIVE_REGISTER,
+                        value=1,
+                    )
+                    if positional_unit is not None:
+                        result = await self.client.write_register(positional_unit, **kwargs)
+                    else:
+                        result = await self.client.write_register(**kwargs)
+                    
+                    if result.isError():
+                        _LOGGER.warning(
+                            "Keep-alive write error at register %s: %s",
+                            KEEP_ALIVE_REGISTER,
+                            result,
+                        )
+                    else:
+                        _LOGGER.debug("Keep-alive written to register %s", KEEP_ALIVE_REGISTER)
+            except asyncio.CancelledError:
+                _LOGGER.debug("Keep-alive task cancelled")
+                break
+            except Exception as err:
+                _LOGGER.error("Keep-alive task error: %s", err)
+
     async def async_shutdown(self) -> None:
-        """Close Modbus client."""
+        """Close Modbus client and stop keep-alive task."""
+        if self._keep_alive_task and not self._keep_alive_task.done():
+            self._keep_alive_task.cancel()
+            try:
+                await self._keep_alive_task
+            except asyncio.CancelledError:
+                pass
         self.client.close()
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -155,6 +203,8 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             connected = await self.client.connect()
             if not connected:
                 raise UpdateFailed("Could not connect to Webasto Unite")
+            # Start keep-alive task on successful connection
+            await self.async_start_keep_alive()
 
         data: dict[str, Any] = {
             "last_update": dt_util.utcnow().isoformat(),
@@ -166,6 +216,39 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return data
 
+    def _get_modbus_call_kwargs(self, **kwargs) -> dict[str, Any]:
+        """Prepare kwargs for Modbus calls with robust keyword handling.
+        
+        Tries device_id (newer pymodbus 3.x), then unit, then slave for unit ID parameter.
+        Returns a dict with appropriate keyword for the installed pymodbus version.
+        """
+        # Store unit_id separately
+        unit_id = kwargs.pop("unit_id", self._unit_id)
+        
+        # Try to determine which keyword argument to use
+        # We'll cache this decision for efficiency
+        if not hasattr(self, "_modbus_unit_keyword"):
+            # Inspect the method signature to determine supported keywords
+            import inspect
+            read_method = self.client.read_holding_registers
+            sig = inspect.signature(read_method)
+            params = sig.parameters.keys()
+            
+            if "device_id" in params:
+                self._modbus_unit_keyword = "device_id"
+            elif "unit" in params:
+                self._modbus_unit_keyword = "unit"
+            elif "slave" in params:
+                self._modbus_unit_keyword = "slave"
+            else:
+                self._modbus_unit_keyword = None  # Use positional
+        
+        result_kwargs = kwargs.copy()
+        if self._modbus_unit_keyword:
+            result_kwargs[self._modbus_unit_keyword] = unit_id
+        
+        return result_kwargs, unit_id if self._modbus_unit_keyword is None else None
+
     async def _read_register(self, register: RegisterDef) -> list[int]:
         """Read a register from the device."""
         count = register.count
@@ -173,14 +256,21 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if register.data_type == "uint32":
             count = 2
 
+        # Prepare kwargs with robust Modbus keyword handling
+        kwargs, positional_unit = self._get_modbus_call_kwargs(
+            address=register.address, count=count
+        )
+        
         if register.input_type == "holding":
-            result = await self.client.read_holding_registers(
-                address=register.address, count=count, device_id=self._unit_id
-            )
+            if positional_unit is not None:
+                result = await self.client.read_holding_registers(positional_unit, **kwargs)
+            else:
+                result = await self.client.read_holding_registers(**kwargs)
         else:
-            result = await self.client.read_input_registers(
-                address=register.address, count=count, device_id=self._unit_id
-            )
+            if positional_unit is not None:
+                result = await self.client.read_input_registers(positional_unit, **kwargs)
+            else:
+                result = await self.client.read_input_registers(**kwargs)
 
         if result.isError():
             raise UpdateFailed(f"Read error at register {register.address}: {result}")
@@ -199,12 +289,15 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 chars.append((item >> 8) & 0xFF)
                 chars.append(item & 0xFF)
             value = bytes(chars).decode("utf-8", errors="ignore").strip("\x00 ")
+            # Return string directly without scaling
+            return value
         else:
             value = registers[0] if registers else None
 
         if value is None:
             return None
 
+        # Apply scaling only to numeric values
         return value * register.scale
 
     async def async_write_holding_register(self, address: int, value: int) -> None:
@@ -214,9 +307,14 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not connected:
                 raise UpdateFailed("Could not connect to Webasto Unite")
 
-        result = await self.client.write_register(
-            address=address, value=value, device_id=self._unit_id
+        kwargs, positional_unit = self._get_modbus_call_kwargs(
+            address=address, value=value
         )
+        if positional_unit is not None:
+            result = await self.client.write_register(positional_unit, **kwargs)
+        else:
+            result = await self.client.write_register(**kwargs)
+        
         if result.isError():
             raise UpdateFailed(f"Write error at register {address}: {result}")
 
