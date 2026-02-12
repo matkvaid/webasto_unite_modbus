@@ -37,6 +37,9 @@ from .const import DOMAIN
 from .coordinator import (
     WebastoUniteCoordinator,
     CHARGE_POINT_STATE,
+    CHARGING_STATE,
+    EQUIPMENT_STATE,
+    CABLE_STATE,
     SENSOR_UNITS,
 )
 
@@ -94,6 +97,34 @@ def _decode_time(value: Any) -> Optional[str]:
 def _decode_state(value: Any) -> Any:
     """Map a charge point state code to a descriptive string."""
     return CHARGE_POINT_STATE.get(value, value)
+
+
+def _decode_charging_state(value: Any) -> Any:
+    """Map a charging state code to a descriptive string."""
+    return CHARGING_STATE.get(value, value)
+
+
+def _decode_equipment_state(value: Any) -> Any:
+    """Map an equipment state code to a descriptive string."""
+    return EQUIPMENT_STATE.get(value, value)
+
+
+def _decode_cable_state(value: Any) -> Any:
+    """Map a cable state code to a descriptive string."""
+    return CABLE_STATE.get(value, value)
+
+
+def _decode_fault_code(value: Any) -> Any:
+    """Map fault code to descriptive string. Show 'No fault' for 0, otherwise return the numeric value."""
+    if value is None:
+        return None
+    try:
+        value_int = int(value)
+    except (ValueError, TypeError):
+        return value
+    if value_int == 0:
+        return "No fault"
+    return value_int
 
 
 def _decode_phases(value: Any) -> Any:
@@ -162,18 +193,22 @@ SENSOR_DESCRIPTIONS: tuple[WebastoUniteSensorDescription, ...] = (
     WebastoUniteSensorDescription(
         key="charging_state",
         name="Charging State",
+        value_fn=_decode_charging_state,
     ),
     WebastoUniteSensorDescription(
         key="equipment_state",
         name="Equipment State",
+        value_fn=_decode_equipment_state,
     ),
     WebastoUniteSensorDescription(
         key="cable_state",
         name="Cable State",
+        value_fn=_decode_cable_state,
     ),
     WebastoUniteSensorDescription(
         key="fault_code",
         name="Fault Code",
+        value_fn=_decode_fault_code,
     ),
     WebastoUniteSensorDescription(
         key="current_l1",

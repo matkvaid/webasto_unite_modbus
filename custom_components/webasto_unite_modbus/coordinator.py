@@ -108,6 +108,29 @@ CHARGE_POINT_STATE = {
     8: "Faulted",
 }
 
+# State mapping for charging state
+CHARGING_STATE = {
+    0: "Idle",
+    1: "Charging",
+}
+
+# State mapping for equipment state
+EQUIPMENT_STATE = {
+    0: "Starting",
+    1: "Running",
+    2: "Fault",
+    3: "Disabled",
+    4: "Updating",
+}
+
+# State mapping for cable state
+CABLE_STATE = {
+    0: "Disconnected",
+    1: "Cable Only",
+    2: "Vehicle Connected",
+    3: "Vehicle Locked",
+}
+
 # Unit mapping used when no native_unit_of_measurement is defined in the entity description
 SENSOR_UNITS = {
     "current_l1": UnitOfElectricCurrent.AMPERE,
