@@ -9,7 +9,7 @@ published Modbus specification for the Webasto Unite wallbox.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from homeassistant.components.number import (
@@ -28,8 +28,9 @@ from .coordinator import WebastoUniteCoordinator, SENSOR_UNITS
 class WebastoUniteNumberDescription(NumberEntityDescription):
     """Describes a writeable Webasto Unite number entity."""
 
-    # Register address used for writing
-    address: int
+    # Register address used for writing (required field)
+    # Using field(kw_only=True) to allow it after parent fields with defaults
+    address: int = field(kw_only=True)
 
 
 NUMBER_DESCRIPTIONS: tuple[WebastoUniteNumberDescription, ...] = (

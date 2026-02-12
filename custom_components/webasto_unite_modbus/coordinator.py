@@ -64,7 +64,7 @@ REGISTER_MAP: tuple[RegisterDef, ...] = (
     RegisterDef("charging_state", 1001),
     RegisterDef("equipment_state", 1002),
     RegisterDef("cable_state", 1004),
-    RegisterDef("fault_code", 1006, data_type="uint32"),
+    RegisterDef("fault_code", 1006, data_type="uint16"),
     # Electrical measurements
     RegisterDef("current_l1", 1008, scale=0.001),
     RegisterDef("current_l2", 1010, scale=0.001),
