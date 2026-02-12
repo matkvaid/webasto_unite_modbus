@@ -20,6 +20,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -322,3 +323,24 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Write error at register {address}: {result}")
 
         await self.async_request_refresh()
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device information about this Webasto Unite charger."""
+        # Get device identifiers from coordinator data
+        serial_number = self.data.get("serial_number", "unknown")
+        model = self.data.get("model", "Unite")
+        brand = self.data.get("brand", "Webasto")
+        firmware_version = self.data.get("firmware_version")
+        
+        device_info = DeviceInfo(
+            identifiers={(DOMAIN, serial_number)},
+            name=f"{brand} {model}",
+            manufacturer=brand,
+            model=model,
+        )
+        
+        if firmware_version:
+            device_info["sw_version"] = firmware_version
+        
+        return device_info
