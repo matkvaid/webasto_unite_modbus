@@ -328,7 +328,7 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Return device registry information for this charger."""
         # Use serial number as the primary identifier, fall back to entry_id if unavailable
         serial_number = self.data.get("serial_number")
-        if not serial_number or serial_number.strip() == "":
+        if not serial_number or (isinstance(serial_number, str) and serial_number.strip() == ""):
             # Use entry_id as fallback to ensure unique identifier
             identifier = self.entry.entry_id
         else:
@@ -340,7 +340,7 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Build device info dict
         device_info = DeviceInfo(
             identifiers=identifiers,
-            name=f"Webasto Unite {self.entry.data[CONF_HOST]}",
+            name=f"Webasto Unite {self.entry.data.get(CONF_HOST, 'Unknown')}",
             manufacturer=self.data.get("brand", "Webasto"),
             model=self.data.get("model", "Unite"),
             sw_version=self.data.get("firmware_version"),
