@@ -326,11 +326,16 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def get_device_info(self) -> DeviceInfo:
         """Return device registry information for this charger."""
-        # Use serial number as the primary identifier
-        serial_number = self.data.get("serial_number", "unknown")
+        # Use serial number as the primary identifier, fall back to entry_id if unavailable
+        serial_number = self.data.get("serial_number")
+        if not serial_number or serial_number.strip() == "":
+            # Use entry_id as fallback to ensure unique identifier
+            identifier = self.entry.entry_id
+        else:
+            identifier = serial_number
         
-        # Create identifiers using DOMAIN and serial number or entry_id as fallback
-        identifiers = {(DOMAIN, serial_number)}
+        # Create identifiers using DOMAIN and serial number or entry_id
+        identifiers = {(DOMAIN, identifier)}
         
         # Build device info dict
         device_info = DeviceInfo(

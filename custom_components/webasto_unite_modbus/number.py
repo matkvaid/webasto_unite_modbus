@@ -18,7 +18,6 @@ from homeassistant.components.number import (
     NumberMode,
 )
 from homeassistant.const import UnitOfElectricCurrent, UnitOfTime
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN

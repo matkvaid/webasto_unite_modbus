@@ -31,7 +31,6 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfTime,
 )
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
