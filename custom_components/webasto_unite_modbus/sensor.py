@@ -279,6 +279,8 @@ class WebastoUniteSensor(CoordinatorEntity[WebastoUniteCoordinator], SensorEntit
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{description.key}"
         # Set a friendly name; use description.name or fall back to key
         self._attr_name = description.name or description.key.replace("_", " ").title()
+        # Link to device
+        self._attr_device_info = coordinator.device_info
         # Set device class and state class when possible
         unit = SENSOR_UNITS.get(description.key)
         if unit is not None:
