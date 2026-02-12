@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
+import inspect
 import logging
 from typing import Any
 
@@ -144,6 +145,9 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self._unit_id = entry.data[CONF_UNIT_ID]
         self._keep_alive_task: asyncio.Task | None = None
+        
+        # Determine Modbus keyword at initialization for thread safety
+        self._modbus_unit_keyword = self._detect_modbus_unit_keyword()
 
         super().__init__(
             hass,
@@ -151,6 +155,24 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=f"{DOMAIN}_{entry.entry_id}",
             update_interval=timedelta(seconds=entry.data[CONF_SCAN_INTERVAL]),
         )
+
+    def _detect_modbus_unit_keyword(self) -> str | None:
+        """Detect which keyword argument the Modbus client uses for unit ID.
+        
+        Returns the keyword to use, or None if positional argument should be used.
+        """
+        read_method = self.client.read_holding_registers
+        sig = inspect.signature(read_method)
+        params = sig.parameters.keys()
+        
+        if "device_id" in params:
+            return "device_id"
+        elif "unit" in params:
+            return "unit"
+        elif "slave" in params:
+            return "slave"
+        else:
+            return None  # Use positional
 
     async def async_start_keep_alive(self) -> None:
         """Start the keep-alive background task."""
@@ -172,7 +194,6 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         result = await self.client.write_register(positional_unit, **kwargs)
                     else:
                         result = await self.client.write_register(**kwargs)
-                    
                     if result.isError():
                         _LOGGER.warning(
                             "Keep-alive write error at register %s: %s",
@@ -216,38 +237,21 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return data
 
-    def _get_modbus_call_kwargs(self, **kwargs) -> dict[str, Any]:
+    def _get_modbus_call_kwargs(self, **kwargs) -> tuple[dict[str, Any], int | None]:
         """Prepare kwargs for Modbus calls with robust keyword handling.
         
         Tries device_id (newer pymodbus 3.x), then unit, then slave for unit ID parameter.
-        Returns a dict with appropriate keyword for the installed pymodbus version.
+        Returns a tuple of (dict with appropriate keyword, optional positional unit_id).
         """
         # Store unit_id separately
         unit_id = kwargs.pop("unit_id", self._unit_id)
         
-        # Try to determine which keyword argument to use
-        # We'll cache this decision for efficiency
-        if not hasattr(self, "_modbus_unit_keyword"):
-            # Inspect the method signature to determine supported keywords
-            import inspect
-            read_method = self.client.read_holding_registers
-            sig = inspect.signature(read_method)
-            params = sig.parameters.keys()
-            
-            if "device_id" in params:
-                self._modbus_unit_keyword = "device_id"
-            elif "unit" in params:
-                self._modbus_unit_keyword = "unit"
-            elif "slave" in params:
-                self._modbus_unit_keyword = "slave"
-            else:
-                self._modbus_unit_keyword = None  # Use positional
-        
         result_kwargs = kwargs.copy()
         if self._modbus_unit_keyword:
             result_kwargs[self._modbus_unit_keyword] = unit_id
-        
-        return result_kwargs, unit_id if self._modbus_unit_keyword is None else None
+            return result_kwargs, None
+        else:
+            return result_kwargs, unit_id
 
     async def _read_register(self, register: RegisterDef) -> list[int]:
         """Read a register from the device."""
@@ -314,7 +318,6 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             result = await self.client.write_register(positional_unit, **kwargs)
         else:
             result = await self.client.write_register(**kwargs)
-        
         if result.isError():
             raise UpdateFailed(f"Write error at register {address}: {result}")
 
