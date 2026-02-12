@@ -31,6 +31,7 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfTime,
 )
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -279,6 +280,8 @@ class WebastoUniteSensor(CoordinatorEntity[WebastoUniteCoordinator], SensorEntit
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{description.key}"
         # Set a friendly name; use description.name or fall back to key
         self._attr_name = description.name or description.key.replace("_", " ").title()
+        # Set device info to register this entity with the device
+        self._attr_device_info = coordinator.get_device_info()
         # Set device class and state class when possible
         unit = SENSOR_UNITS.get(description.key)
         if unit is not None:

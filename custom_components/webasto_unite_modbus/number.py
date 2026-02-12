@@ -18,6 +18,7 @@ from homeassistant.components.number import (
     NumberMode,
 )
 from homeassistant.const import UnitOfElectricCurrent, UnitOfTime
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -84,6 +85,8 @@ class WebastoUniteNumber(CoordinatorEntity[WebastoUniteCoordinator], NumberEntit
         self.entity_description = description
         self._attr_unique_id = f"{coordinator.entry.entry_id}_{description.key}"
         self._attr_name = description.name or description.key.replace("_", " ").title()
+        # Set device info to register this entity with the device
+        self._attr_device_info = coordinator.get_device_info()
         # Set unit of measurement from SENSOR_UNITS if defined
         unit = SENSOR_UNITS.get(description.key)
         if unit is not None:

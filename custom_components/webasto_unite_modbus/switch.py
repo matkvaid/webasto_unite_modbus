@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -34,6 +35,8 @@ class WebastoUniteAliveSwitch(CoordinatorEntity[WebastoUniteCoordinator], Switch
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.entry.entry_id}_alive_register"
         self._attr_name = "Alive Register"
+        # Set device info to register this entity with the device
+        self._attr_device_info = coordinator.get_device_info()
 
     @property
     def is_on(self) -> bool:
