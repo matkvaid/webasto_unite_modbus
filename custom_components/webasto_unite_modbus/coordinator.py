@@ -328,19 +328,24 @@ class WebastoUniteCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def device_info(self) -> DeviceInfo:
         """Return device information about this Webasto Unite charger."""
         # Get device identifiers from coordinator data
-        serial_number = self.data.get("serial_number", "unknown")
+        serial_number = self.data.get("serial_number")
+        if not serial_number:
+            # Use entry_id as fallback to ensure unique identifier
+            serial_number = self.entry.entry_id
+        
         model = self.data.get("model", "Unite")
         brand = self.data.get("brand", "Webasto")
         firmware_version = self.data.get("firmware_version")
         
-        device_info = DeviceInfo(
-            identifiers={(DOMAIN, serial_number)},
-            name=f"{brand} {model}",
-            manufacturer=brand,
-            model=model,
-        )
+        # Build device info with conditional sw_version
+        device_info_dict = {
+            "identifiers": {(DOMAIN, serial_number)},
+            "name": f"{brand} {model}",
+            "manufacturer": brand,
+            "model": model,
+        }
         
         if firmware_version:
-            device_info["sw_version"] = firmware_version
+            device_info_dict["sw_version"] = firmware_version
         
-        return device_info
+        return DeviceInfo(**device_info_dict)
